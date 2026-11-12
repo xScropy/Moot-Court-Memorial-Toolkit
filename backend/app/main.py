@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .analysis.docx_parser import InvalidDocument
@@ -277,3 +278,9 @@ def export_report(report_id: str, format: str = "html"):
         render_html(report, report["meta"]),
         headers={"Content-Disposition": f'attachment; filename="{stem}-compliance-report.html"'},
     )
+
+
+# The packaged desktop app serves the exported frontend from the same origin.
+_static = os.environ.get("MCMT_STATIC_DIR")
+if _static and os.path.isdir(_static):
+    app.mount("/", StaticFiles(directory=_static, html=True), name="web")

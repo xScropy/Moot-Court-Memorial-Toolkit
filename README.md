@@ -35,7 +35,19 @@ are labelled and always need a person to confirm.
   review, version comparison. Without authentication, run this locally or on a
   trusted network only.
 
-## Run it
+## Download for Windows
+
+Get the latest `.exe` from the
+[Releases page](https://github.com/xScropy/Moot-Court-Memorial-Toolkit/releases/latest)
+and double-click it. Nothing to install: it opens the app in your browser and
+keeps your data in `%LOCALAPPDATA%\MootCourtMemorialToolkit`. The file is not
+code-signed, so Windows SmartScreen asks for confirmation the first time
+(**More info → Run anyway**).
+
+To publish a new release, run the **Release** workflow from the Actions tab
+with a version such as `v0.2.0`, or push a tag of that form.
+
+## Run it from source
 
 Backend (Python 3.11+):
 

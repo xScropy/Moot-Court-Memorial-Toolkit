@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to publish, e.g. v0.1.0"
+        required: true
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          DESKTOP_BUILD: "1"
+          NEXT_PUBLIC_API_URL: ""
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Test backend
+        working-directory: backend
+        run: |
+          pip install -r requirements-dev.txt pyinstaller
+          python -m pytest -q
+
+      - name: Build executable
+        working-directory: backend
+        shell: bash
+        run: |
+          cp -r ../frontend/out web
+          python -m PyInstaller --noconfirm --onefile --name MootCourtMemorialToolkit \
+            --add-data "web:web" --collect-data docx --hidden-import app.main launcher.py
+
+      - name: Smoke test executable
+        working-directory: backend
+        shell: pwsh
+        run: |
+          $env:MCMT_NO_BROWSER = "1"
+          $env:MCMT_PORT = "8791"
+          $env:MCMT_DATA_DIR = "$env:RUNNER_TEMP\mcmt-data"
+          $p = Start-Process -FilePath dist\MootCourtMemorialToolkit.exe -PassThru
+          $ok = $false
+          foreach ($i in 1..30) {
+            Start-Sleep -Seconds 1
+            try {
+              $h = Invoke-RestMethod http://127.0.0.1:8791/api/health
+              $page = Invoke-WebRequest http://127.0.0.1:8791/projects/ -UseBasicParsing
+              if ($h.status -eq "ok" -and $page.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+          }
+          Stop-Process -Id $p.Id -Force
+          if (-not $ok) { throw "The packaged app did not start" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MootCourtMemorialToolkit-windows
+          path: backend/dist/MootCourtMemorialToolkit.exe
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp backend/dist/MootCourtMemorialToolkit.exe "MootCourtMemorialToolkit-$VERSION-windows.exe"
+          gh release create "$VERSION" "MootCourtMemorialToolkit-$VERSION-windows.exe" \
+            --target "$GITHUB_SHA" --title "Moot Court Memorial Toolkit $VERSION" \
+            --notes-file .github/release-notes.md
